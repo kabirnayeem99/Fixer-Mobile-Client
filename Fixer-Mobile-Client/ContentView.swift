@@ -195,20 +195,21 @@ struct ContentView: View {
                         ForEach(symbols, id: \.self) { symbol in
                             Text(symbol.label).tag(symbol as Symbol)
                         }
-                    }.pickerStyle(.menu)
-                    if (amount > 0) {
+                    }.pickerStyle(.automatic)
+                    if amount > 0 {
                         Button(action: {
                             Task {
                                 do {
                                     rates = []
-                                    if (amount > 0) {
+                                    if amount > 0 {
                                         let symbolId = fromSymbol.short
                                         let dto = try await getExchangeRates(
                                             symbolId: symbolId)
                                         let rateDtos = dto.conversionRates
                                         if dto.result == "success" {
                                             rateDtos?.forEach { key, value in
-                                                let calculatedAmount = value * amount
+                                                let calculatedAmount =
+                                                    value * amount
                                                 rates.append(
                                                     CurrencyRateData(
                                                         short: key,
@@ -235,9 +236,9 @@ struct ContentView: View {
                         }) {
                             Text("Calculate")
                                 .cornerRadius(8)
-                        }.buttonStyle(.bordered)
-                        .padding()
-                        
+                        }.buttonStyle(.automatic)
+                            .padding()
+
                         ForEach(rates, id: \.id) { rate in
                             Text(
                                 "\(rate.short) \(String(format: "%.2f", rate.rate))"
@@ -253,11 +254,12 @@ struct ContentView: View {
     func getExchangeRates(symbolId: String) async throws
         -> ExchangeRatesDto
     {
-        
-        let cache = URLCache(memoryCapacity: 20 * 1024 * 1024, // 20 MB memory cache
-                               diskCapacity: 30 * 1024 * 1024, // 30 MB disk cache
-                               diskPath: nil)
-           URLCache.shared = cache
+
+        let cache = URLCache(
+            memoryCapacity: 20 * 1024 * 1024,  // 20 MB memory cache
+            diskCapacity: 30 * 1024 * 1024,  // 30 MB disk cache
+            diskPath: nil)
+        URLCache.shared = cache
 
         guard !symbolId.isEmpty else {
             throw FixerApiError.noSymbolId
@@ -269,16 +271,16 @@ struct ContentView: View {
         guard let url = URL(string: urlText) else {
             throw FixerApiError.invalidURL
         }
-        
+
         let request = URLRequest(url: url)
 
         let (data, response) = try await URLSession.shared.data(for: request)
 
         // Check if the response was cached
         if let httpResponse = response as? HTTPURLResponse {
-            if let cachedResponse = URLCache.shared.cachedResponse(for: request) {
+            if let cachedResponse = URLCache.shared.cachedResponse(for: request)
+            {
                 print("Response served from cache")
-                // You can also inspect the cached response if needed
             } else {
                 print("Response served from network")
             }
