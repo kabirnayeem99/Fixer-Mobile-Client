@@ -190,60 +190,60 @@ struct ContentView: View {
                         "Enter your amount", value: $amount, format: .number
                     )
                     .keyboardType(.numberPad)
-                    .padding()
+                    .multilineTextAlignment(.center)
                     Picker("Select your currency", selection: $fromSymbol) {
                         ForEach(symbols, id: \.self) { symbol in
                             Text(symbol.label).tag(symbol as Symbol)
                         }
-                    }.pickerStyle(.menu).padding()
-                    
-                    Button(action: {
-                        Task {
-                            do {
-                                rates = []
-                                if (amount > 0) {
-                                    let symbolId = fromSymbol.short
-                                    let dto = try await getExchangeRates(
-                                        symbolId: symbolId)
-                                    let rateDtos = dto.conversionRates
-                                    if dto.result == "success" {
-                                        rateDtos?.forEach { key, value in
-                                            let calculatedAmount = value * amount
-                                            rates.append(
-                                                CurrencyRateData(
-                                                    short: key,
-                                                    rate: calculatedAmount)
-                                            )
+                    }.pickerStyle(.menu)
+                    if (amount > 0) {
+                        Button(action: {
+                            Task {
+                                do {
+                                    rates = []
+                                    if (amount > 0) {
+                                        let symbolId = fromSymbol.short
+                                        let dto = try await getExchangeRates(
+                                            symbolId: symbolId)
+                                        let rateDtos = dto.conversionRates
+                                        if dto.result == "success" {
+                                            rateDtos?.forEach { key, value in
+                                                let calculatedAmount = value * amount
+                                                rates.append(
+                                                    CurrencyRateData(
+                                                        short: key,
+                                                        rate: calculatedAmount)
+                                                )
+                                            }
+                                            rates.sort { r1, r2 in
+                                                r1.rate < r2.rate
+                                            }
+                                        } else {
+                                            print(dto)
                                         }
-                                    } else {
-                                        print(dto)
                                     }
+                                } catch FixerApiError.noSymbolId {
+                                    print("No Symbol ID")
+                                } catch FixerApiError.ApiFailed {
+                                    print("Failed the API.")
+                                } catch FixerApiError.noRates {
+                                    print("No rates")
+                                } catch FixerApiError.decodingFailed {
+                                    print("Failed to decode.")
                                 }
-                            } catch FixerApiError.noSymbolId {
-                                print("No Symbol ID")
-                            } catch FixerApiError.ApiFailed {
-                                print("Failed the API.")
-                            } catch FixerApiError.noRates {
-                                print("No rates")
-                            } catch FixerApiError.decodingFailed {
-                                print("Failed to decode.")
                             }
-                        }
-                    }) {
-                        Text("Calculate")
-                            .padding()
-                            .foregroundColor(.white)
-                            .background(Color.blue)
-                            .cornerRadius(8)
+                        }) {
+                            Text("Calculate")
+                                .cornerRadius(8)
+                        }.buttonStyle(.bordered)
+                        .padding()
+                        
+                        ForEach(rates, id: \.id) { rate in
+                            Text(
+                                "\(rate.short) \(String(format: "%.2f", rate.rate))"
+                            )
+                        }.padding()
                     }
-                    .padding()
-                    
-                    ForEach(rates, id: \.id) { rate in
-                        Text(
-                            "\(rate.short) \(String(format: "%.2f", rate.rate))"
-                        )
-                    }.padding()
-                  
                 }
             }.padding()
 
@@ -253,6 +253,11 @@ struct ContentView: View {
     func getExchangeRates(symbolId: String) async throws
         -> ExchangeRatesDto
     {
+        
+        let cache = URLCache(memoryCapacity: 20 * 1024 * 1024, // 20 MB memory cache
+                               diskCapacity: 30 * 1024 * 1024, // 30 MB disk cache
+                               diskPath: nil)
+           URLCache.shared = cache
 
         guard !symbolId.isEmpty else {
             throw FixerApiError.noSymbolId
@@ -264,13 +269,23 @@ struct ContentView: View {
         guard let url = URL(string: urlText) else {
             throw FixerApiError.invalidURL
         }
+        
+        let request = URLRequest(url: url)
 
-        let (data, response) = try await URLSession.shared.data(from: url)
+        let (data, response) = try await URLSession.shared.data(for: request)
 
-        guard let response = response as? HTTPURLResponse,
-            response.statusCode == 200
-        else {
-            throw FixerApiError.ApiFailed
+        // Check if the response was cached
+        if let httpResponse = response as? HTTPURLResponse {
+            if let cachedResponse = URLCache.shared.cachedResponse(for: request) {
+                print("Response served from cache")
+                // You can also inspect the cached response if needed
+            } else {
+                print("Response served from network")
+            }
+
+            guard httpResponse.statusCode == 200 else {
+                throw FixerApiError.ApiFailed
+            }
         }
 
         if let jsonResponse = String(data: data, encoding: .utf8) {
